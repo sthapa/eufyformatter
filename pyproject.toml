@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.12"
 rich =  "~13.7"
 click = "~8.1.7"
+getkey = "^0.6.5"
 
 
 [build-system]
