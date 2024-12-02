@@ -3,6 +3,8 @@
 import csv
 import os
 import sys
+import time
+import datetime
 
 from dataclasses import dataclass
 
@@ -13,7 +15,6 @@ from rich.console import Console
 from rich.table import Table
 from rich.style import Style
 from getkey import getkey, keys
-import datetime
 
 EUFY_COLUMN_CONVERSIONS = {
   "Time": "Date",
@@ -41,7 +42,7 @@ EUFY_COLUMN_CONVERSIONS = {
 
 @dataclass
 class WeightEntry:
-  time: datetime.date
+  time: datetime.datetime
   weight: float  # weight in kg
   bmi: float
   family_member: str = ""  # name of user
@@ -82,7 +83,6 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
     reader = csv.DictReader(eufy_file)
     for row in reader:
       entry = WeightEntry("2000-01-01", 0.0, 0.0)
-      print(row)
       for key, val in row.items():
         match key:
           case "Time":
@@ -203,27 +203,35 @@ def select_columns() -> list[str]:
       case _:
         pass
 
-def generate_date_table(table_data:list[tuple[str, str]],
-                        start_date: datetime.datetime,
-                        end_date: datetime.datetime,) -> Table:
+def generate_date_table(table_data:list[datetime.datetime],
+                        start_time: datetime.datetime,
+                        end_time: datetime.datetime,
+                        cur_row = None) -> Table:
   """
   Generate a table of dates for display
 
   :param table_data: table data to render
-  :param start_date: start date of selected range
-  :param end_date: end date of selected range
+  :param start_time: start date of selected range
+  :param end_time: end date of selected range
   :return: table to be shown
   """
   cur_row_style = Style(color="black", bgcolor="cornsilk1")
   selected_row_style = Style(color="black", bgcolor="cornsilk1")
   table = Table(show_header=True, header_style="bold magenta")
+  table.add_column("Selected", width=2, max_width=2)
   table.add_column("Date")
+  row = 0
+  if cur_row is None:
+    cur_row = 0
   for entry in table_data:
     select_col_char = ""
     if row == cur_row:
-      table.add_row(select_col_char, entry[0], entry[1], style=cur_row_style)
+      table.add_row(select_col_char, entry.strftime("%Y-%M-%d %H:%M:%S"),  style=cur_row_style)
+    elif entry >= start_time or entry <= end_time:
+      select_col_char = rich.emoji.Emoji("x")
+      table.add_row(select_col_char, entry.strftime("%Y-%M-%d %H:%M:%S"))
     else:
-      table.add_row(select_col_char, entry[0], entry[1])
+      table.add_row(select_col_char, entry.strftime("%Y-%M-%d %H:%M:%S"))
     row += 1
   return table
 
@@ -234,7 +242,42 @@ def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.da
   :param entries: list of entries from eufy export
   :return: a start and end date
   """
-  dates = [x.time.date() for x in entries]
+  dates = [x.time for x in entries]
+
+  start_time = min(dates)
+  end_time = max(dates)
+  console = Console()
+  selected_rows = []
+  cur_row = 0
+  while True:
+    console.clear()
+    date_table = generate_date_table(dates, start_time=start_time, end_time=end_time, cur_row=cur_row)
+    console.print(date_table)
+    console.print("Use up/down keys and space bar to select columns, press enter to continue")
+    console.print(f"{start_time} {end_time}")
+    key = getkey()
+    match key:
+      case keys.UP:
+        if cur_row == 0:
+          pass
+        else:
+          cur_row -= 1
+      case keys.DOWN:
+        if cur_row == (date_table.row_count - 1):
+          pass
+        else:
+          cur_row += 1
+      case keys.SPACE:
+        selected_time = dates[cur_row]
+        console.print(selected_time)
+        if selected_time <  start_time:
+          start_time = selected_time
+        if selected_time > end_time:
+          end_time = selected_time
+      case keys.ENTER:
+        return [ table_data[x][0] for x in selected_rows]
+      case _:
+        pass
 
   return (start_time, end_time)
 
