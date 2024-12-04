@@ -3,14 +3,12 @@
 import csv
 import os
 import sys
-import time
 import datetime
 
 from dataclasses import dataclass
 
 import click
 import rich.emoji
-from click import Tuple
 from rich.console import Console
 from rich.table import Table
 from rich.style import Style
@@ -216,7 +214,8 @@ def generate_date_table(table_data:list[datetime.datetime],
   :return: table to be shown
   """
   cur_row_style = Style(color="black", bgcolor="cornsilk1")
-  selected_row_style = Style(color="black", bgcolor="cornsilk1")
+  selected_row_style = Style(color="black", bgcolor="gold1")
+  table_data.sort()
   table = Table(show_header=True, header_style="bold magenta")
   table.add_column("Selected", width=2, max_width=2)
   table.add_column("Date")
@@ -226,12 +225,16 @@ def generate_date_table(table_data:list[datetime.datetime],
   for entry in table_data:
     select_col_char = ""
     if row == cur_row:
-      table.add_row(select_col_char, entry.strftime("%Y-%M-%d %H:%M:%S"),  style=cur_row_style)
-    elif entry >= start_time or entry <= end_time:
+      table.add_row(select_col_char,
+                    entry.strftime("%Y-%m-%d %H:%M:%S"),
+                    style=cur_row_style)
+    elif start_time <= entry <= end_time:
       select_col_char = rich.emoji.Emoji("x")
-      table.add_row(select_col_char, entry.strftime("%Y-%M-%d %H:%M:%S"))
+      table.add_row(select_col_char,
+                    entry.strftime("%Y-%m-%d %H:%M:%S"),
+                    style=selected_row_style)
     else:
-      table.add_row(select_col_char, entry.strftime("%Y-%M-%d %H:%M:%S"))
+      table.add_row(select_col_char, entry.strftime("%Y-%m-%d %H:%M:%S"))
     row += 1
   return table
 
@@ -253,8 +256,9 @@ def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.da
     console.clear()
     date_table = generate_date_table(dates, start_time=start_time, end_time=end_time, cur_row=cur_row)
     console.print(date_table)
-    console.print("Use up/down keys and space bar to select columns, press enter to continue")
-    console.print(f"{start_time} {end_time}")
+    console.print("Use up/down keys to navigate")
+    console.print("Use s to indicate the start of export range, e to indicate the end")
+    console.print("Press enter to continue")
     key = getkey()
     match key:
       case keys.UP:
@@ -267,19 +271,66 @@ def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.da
           pass
         else:
           cur_row += 1
-      case keys.SPACE:
-        selected_time = dates[cur_row]
-        console.print(selected_time)
-        if selected_time <  start_time:
-          start_time = selected_time
-        if selected_time > end_time:
-          end_time = selected_time
+      case "s":
+        start_time = dates[cur_row]
+      case "e":
+        end_time = dates[cur_row]
       case keys.ENTER:
-        return [ table_data[x][0] for x in selected_rows]
+        return (start_time, end_time)
       case _:
         pass
 
-  return (start_time, end_time)
+def export_entries(filename: str, entries: list[WeightEntry], export_fields: list[str]) -> bool:
+  """
+  Export entries from Eufy export
+
+  :param filename: name of file to write to
+  :param entries: entries to write
+  :return: True on success, False on failure
+  """
+  with open(filename, "w") as f:
+    csv_writer = csv.writer(f)
+    csv_writer.writerow(export_fields)
+    for entry in entries:
+      row = []
+      for field in export_fields:
+        print(EUFY_COLUMN_CONVERSIONS[field])
+        match EUFY_COLUMN_CONVERSIONS[field]:
+          case "time":
+            row.append(entry.time)
+          case "weight":
+            row.append(entry.weight)
+          case "bmi":
+            row.append(entry.bmi)
+          case "body_fat":
+            row.append(entry.body_fat)
+          case "muscle_mass":
+            row.append(entry.muscle_mass)
+          case "bmr_water":
+            row.append(entry.bmr_water)
+          case "bone_mass":
+            row.append(entry.bone_mass)
+          case (\
+            "family_member" |
+            "heart_rate" |
+            "muscle_mass_percent" |
+            "body_fat_mass" |
+            "lean_body_mass" |
+            "bone_mass_percentage" |
+            "visceral_fat_mass" |
+            "protein_percentage" |
+            "skeletal_muscle_mass" |
+            "subcutaneous_fat_percentage" |
+            "body_age" |
+            "body_type" |
+            "head_size"
+          ):
+            pass
+          case _:
+            pass
+      print(row)
+      csv_writer.writerow(row)
+  return True
 
 @click.command()
 @click.option('--filename', help="File with data to import", required=True)
@@ -299,8 +350,13 @@ def interactive_export(filename: str = None) -> None:
     sys.exit(1)
   entries = read_eufyfile(filename)
   columns = select_columns()
-  start_date, end_date = select_dates(entries)
-
+  start_time, end_time = select_dates(entries)
+  filtered_entries = []
+  for entry in entries:
+    if start_time <= entry.time <= end_time:
+      filtered_entries.append(entry)
+  filtered_entries.sort(key=lambda x: x.time)
+  export_entries("exported.csv", filtered_entries, columns)
 
 
 
