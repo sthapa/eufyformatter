@@ -4,7 +4,7 @@ import csv
 import os
 import sys
 import datetime
-
+from collections import defaultdict
 from dataclasses import dataclass
 
 import click
@@ -13,12 +13,13 @@ from rich.console import Console
 from rich.table import Table
 from rich.style import Style
 from getkey import getkey, keys
+from fit import FitEncoderWeight
 
 EUFY_COLUMN_CONVERSIONS = {
   "Time": "Date",
-  "Family Members" : None,
-  "WEIGHT (kg)": 	"Body Weight",
-  "BMI" : "BMI",
+  "Family Members": None,
+  "WEIGHT (kg)": "Body Weight",
+  "BMI": "BMI",
   "BODY FAT %": "Body Fat",
   "HEART RATE (bpm)": None,
   "MUSCLE MASS (kg)": "Skeletal Muscle Mass",
@@ -38,6 +39,7 @@ EUFY_COLUMN_CONVERSIONS = {
   "HEAD SIZE (cm)": None
 }
 
+
 @dataclass
 class WeightEntry:
   time: datetime.datetime
@@ -49,8 +51,8 @@ class WeightEntry:
   muscle_mass: float = 0  # muscle mass in body in kg
   muscle_mass_percent: float = 0  # % of body weight due to muscle
   bmr: float = 0
-  water: float = 0 # mass of water in body in kg
-  body_fat_mass: float = 0    # fat in body in kg
+  water: float = 0  # mass of water in body in kg
+  body_fat_mass: float = 0  # fat in body in kg
   lean_body_mass: float = 0  # lean body mass in kg
   bone_mass: float = 0  # mass of bones in kg
   bone_mass_percentage: float = 0  # % of body weight due to bones
@@ -62,25 +64,78 @@ class WeightEntry:
   body_type: str = ""  # body type categorization
   head_size: float = 0  # size of head in cm
 
+
+def convert_fieldname(fieldname: str) -> str:
+  """
+  Convert fieldname to data class field name
+
+  :param fieldname: field name to convert
+  :return: str with converted fieldname
+  """
+  match fieldname:
+    case "Time":
+      return "time"
+    case "Family Members":
+      pass
+    case "WEIGHT (kg)":
+      return "weight"
+    case "BMI":
+      return "bmi"
+    case "BODY FAT %":
+      return "body_fat"
+    case "HEART RATE (bpm)":
+      return "heart_rate"
+    case "MUSCLE MASS (kg)":
+      return "muscle_mass"
+    case "MUSCLE MASS %":
+      return "muscle_mass_percent"
+    case "BMR":
+      return "bmr"
+    case "WATER":
+      return "water"
+    case "BODY FAT MASS (kg)":
+      return "body_fat_mass"
+    case "LEAN BODY MASS (kg)":
+      return "lean_body_mass"
+    case "BONE MASS (kg)":
+      return "bone_mass"
+    case "BONE MASS %":
+      return "bone_mass_percent"
+    case "VISCERAL FAT":
+      return "visceral_fat_mass"
+    case "PROTEIN %":
+      return "protein_percentage"
+    case "SKELETAL MUSCLE MASS (kg)":
+      return "skeletal_muscle_mass"
+    case "SUBCUTANEOUS FAT %":
+      return "subcutaneous_fat_percentage"
+    case "BODY AGE":
+      return "body_age"
+    case "BODY TYPE":
+      return "body_type"
+    case "HEAD SIZE (cm)":
+      return "head_size"
+    case _:
+      sys.exit(f"Unrecognized field {fieldname}, exiting\n")
+
+
 def read_eufyfile(filename: str = None) -> list[WeightEntry]:
   """
-  Parse a exported eufy file and return a list with entries
+  Parse an exported eufy file and return a list with entries
 
   :param filename: string with name of file to read
   :return: list of WeightEntry objects
   """
   if filename is None:
-    sys.stderr.write("Filename not specified, exiting\n")
-    sys.exit(1)
+    sys.exit("Filename not specified, exiting\n")
   if not os.path.exists(filename) or not os.path.isfile(filename):
-    sys.stderr.write("File does not exist or is invalid, exiting\n")
-    sys.exit(1)
+    sys.exit("File does not exist or is invalid, exiting\n")
 
   entries = []
   with open(filename, "r", encoding='utf-8-sig') as eufy_file:
     reader = csv.DictReader(eufy_file)
     for row in reader:
-      entry = WeightEntry("2000-01-01", 0.0, 0.0)
+      entry = WeightEntry(datetime.datetime.now(), 0.0, 0.0)
       for key, val in row.items():
         match key:
           case "Time":
@@ -126,17 +181,87 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
           case "HEAD SIZE (cm)":
             entry.head_size = float(val)
           case _:
-            sys.stderr.write(f"Unrecognized field --{key}--, exiting\n")
-            sys.stderr.write(f"Unrecognized field --{key == "Time"}--, exiting\n")
-            sys.exit(1)
-
+            sys.exit(f"Unrecognized field {key}, exiting\n")
       entries.append(entry)
   return entries
 
 
-def generate_column_table(table_data:list[tuple[str, str]],
+def write_garmin_file(filename: str, entries: list[WeightEntry], fields: list[str] = None) -> None:
+  """
+  Write a csv file for import to garmin
+
+  :param filename: filename to write
+  :param entries: list of WeightEntry objects
+  :param fields:  list of fields from entries to export
+  :return: None
+  """
+  if os.path.exists(filename):
+    sys.exit("File already exists, exiting\n")
+  selected_fields = [convert_fieldname(x) for x in fields]
+  if fields is None:
+    selected_fields = ["time", "weight", "bmi", "body_fat", "muscle_mass", "bmr", "water", "bone_mass"]
+
+  encoder = FitEncoderWeight()
+  encoder.write_file_info()
+  encoder.write_file_creator()
+
+  with open(filename, "wb") as f:
+    for entry in entries:
+      fields = defaultdict(float)
+      for field in selected_fields:
+        match field:
+          case "weight":
+            fields["weight"] = entry.weight
+          case "bmi":
+            fields["bmi"] = entry.bmi
+          case "body_fat":
+            fields["body_fat"] = entry.body_fat
+          case "muscle_mass":
+            fields["muscle_mass"] = entry.muscle_mass
+          case "bmr":
+            fields["bmr"] = entry.bmr
+          case "water":
+            fields["water"] = entry.water
+          case "bone_mass":
+            fields["bone_mass"] = entry.bone_mass
+          case "body_age":
+            fields["body_age"] = entry.body_age
+          case "visceral_fat_mass":
+            fields["visceral_fat_mass"] = entry.visceral_fat_mass
+          case ("family_member" |
+                "heart_rate" |
+                "muscle_mass_percent" |
+                "body_fat_mass" |
+                "lean_body_mass" |
+                "bone_mass_percentage" |
+                "visceral_fat_mass" |
+                "protein_percentage" |
+                "skeletal_muscle_mass" |
+                "subcutaneous_fat_percentage" |
+                "body_age" |
+                "body_type" |
+                "head_size"):
+            pass
+          case _:
+            pass
+      print(fields)
+      encoder.write_weight_scale(timestamp=entry.time,
+                                 weight=fields["weight"],
+                                 percent_fat=fields["body_fat"],
+                                 percent_hydration=fields["water"],
+                                 visceral_fat_mass=fields["visceral_fat_mass"],
+                                 bone_mass=fields['bone_mass'],
+                                 muscle_mass=fields["muscle_mass"],
+                                 basal_met=fields["bmr"],
+                                 metabolic_age=fields["body_age"])
+
+    encoder.finish()
+    f.write(encoder.getvalue())
+
+
+def generate_column_table(table_data: list[tuple[str, str]],
                           selected_rows: list[str],
-                          cur_row = None) -> Table:
+                          cur_row=None) -> Table:
   """
   Generate a table of columns for display
 
@@ -162,6 +287,7 @@ def generate_column_table(table_data:list[tuple[str, str]],
     row += 1
   return table
 
+
 def select_columns() -> list[str]:
   """
   Select columns to convert from Eufy file
@@ -171,12 +297,12 @@ def select_columns() -> list[str]:
   selected_rows = []
   cur_row = 0
   table_data = []
-  for k,v in EUFY_COLUMN_CONVERSIONS.items():
+  for k, v in EUFY_COLUMN_CONVERSIONS.items():
     if v is not None:
       table_data.append((k, v))
   while True:
     console.clear()
-    table= generate_column_table(table_data, selected_rows, cur_row)
+    table = generate_column_table(table_data, selected_rows, cur_row)
     console.print(table)
     console.print("Use up/down keys and space bar to select columns, press enter to continue")
     key = getkey()
@@ -197,20 +323,22 @@ def select_columns() -> list[str]:
         else:
           selected_rows.append(cur_row)
       case keys.ENTER:
-        return [ table_data[x][0] for x in selected_rows]
+        return [table_data[x][0] for x in selected_rows]
       case _:
         pass
 
-def generate_date_table(table_data:list[datetime.datetime],
+
+def generate_date_table(table_data: list[datetime.datetime],
                         start_time: datetime.datetime,
                         end_time: datetime.datetime,
-                        cur_row = None) -> Table:
+                        cur_row=None) -> Table:
   """
   Generate a table of dates for display
 
   :param table_data: table data to render
   :param start_time: start date of selected range
   :param end_time: end date of selected range
+  :param cur_row: current row
   :return: table to be shown
   """
   cur_row_style = Style(color="black", bgcolor="cornsilk1")
@@ -238,6 +366,7 @@ def generate_date_table(table_data:list[datetime.datetime],
     row += 1
   return table
 
+
 def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.date]:
   """
   Prompt users to select a range of dates from entries
@@ -250,7 +379,6 @@ def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.da
   start_time = min(dates)
   end_time = max(dates)
   console = Console()
-  selected_rows = []
   cur_row = 0
   while True:
     console.clear()
@@ -276,9 +404,10 @@ def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.da
       case "e":
         end_time = dates[cur_row]
       case keys.ENTER:
-        return (start_time, end_time)
+        return start_time, end_time
       case _:
         pass
+
 
 def export_entries(filename: str, entries: list[WeightEntry], export_fields: list[str]) -> bool:
   """
@@ -286,6 +415,7 @@ def export_entries(filename: str, entries: list[WeightEntry], export_fields: lis
 
   :param filename: name of file to write to
   :param entries: entries to write
+  :param export_fields: list of fields to export
   :return: True on success, False on failure
   """
   with open(filename, "w") as f:
@@ -306,11 +436,11 @@ def export_entries(filename: str, entries: list[WeightEntry], export_fields: lis
             row.append(entry.body_fat)
           case "muscle_mass":
             row.append(entry.muscle_mass)
-          case "bmr_water":
-            row.append(entry.bmr_water)
+          case "bmr_water":            
+            row.append(entry.bmr)
           case "bone_mass":
             row.append(entry.bone_mass)
-          case (\
+          case (
             "family_member" |
             "heart_rate" |
             "muscle_mass_percent" |
@@ -332,6 +462,7 @@ def export_entries(filename: str, entries: list[WeightEntry], export_fields: lis
       csv_writer.writerow(row)
   return True
 
+
 @click.command()
 @click.option('--filename', help="File with data to import", required=True)
 def interactive_export(filename: str = None) -> None:
@@ -339,15 +470,12 @@ def interactive_export(filename: str = None) -> None:
   Interactively export data to a Garmin compatible csv file
 
   :param filename: string with name of file to open
-  :param entries: data to export to file
   :return: None
   """
   if filename is None:
-    sys.stderr.write("Filename not specified, exiting\n")
-    sys.exit(1)
+    sys.exit("Filename not specified, exiting\n")
   if not os.path.exists(filename):
-    sys.stderr.write("File does not exist, exiting\n")
-    sys.exit(1)
+    sys.exit("File does not exist, exiting\n")
   entries = read_eufyfile(filename)
   columns = select_columns()
   start_time, end_time = select_dates(entries)
@@ -356,64 +484,31 @@ def interactive_export(filename: str = None) -> None:
     if start_time <= entry.time <= end_time:
       filtered_entries.append(entry)
   filtered_entries.sort(key=lambda x: x.time)
-  export_entries("exported.csv", filtered_entries, columns)
-
+  write_garmin_file("exported.fit", filtered_entries, columns)
 
 
 @click.command()
 @click.option('--filename', help="File with data to import", required=True)
-# @click.option('--start', help="Start date in YYYY-MM-DD format", required=False)
-# @click.option('--end', help="End date in YYYY-MM-DD format", required=False)
-# @click.option('--since', help="Start date in YYYY-MM", required=False)
-def batch_export(filename: str, entries: list[WeightEntry], export_fields: list[str]) -> None:
+@click.option('--output', help="File with data to import", required=True)
+@click.option('--start', help="Start date in YYYY-MM-DD format", required=False)
+@click.option('--end', help="End date in YYYY-MM-DD format", required=False)
+def batch_export(filename: str, output: str, start, end, export_fields: list[str]) -> None:
   """
-  Export data to csv file that Garmin Copnnect can import
+  Export data to csv file that Garmin Connect can import
 
   :param filename: string with name of file to open
-  :param entries: data to export to file
-  :parma export_fields: list of fields to export
+  :param output: string with name of file to export to
+  :param start: start date in YYYY-MM-DD format
+  :param end: end date in YYYY-MM-DD format
+  :param export_fields: optional list of fields to export
   :return: None
   """
-  with open(filename, "w") as f:
-    csv_writer = csv.writer(f, fieldnames=export_fields)
+  if filename is None:
+    sys.exit("Filename not specified, exiting\n")
+  if not os.path.exists(filename):
+    sys.exit("File does not exist, exiting\n")
+  entries = read_eufyfile(filename)
 
-    for entry in entries:
-      row = []
-      for field in export_fields:
-        match field:
-          case "time":
-            row.append(entry.time)
-          case "weight":
-            row.append(entry.weight)
-          case "bmi":
-            row.append(entry.bmi)
-          case "body_fat":
-            row.append(entry.body_fat)
-          case "muscle_mass":
-            row.append(entry.muscle_mass)
-          case "bmr_water":
-            row.append(entry.bmr_water)
-          case "bone_mass":
-            row.append(entry.bone_mass)
-          case (\
-            "family_member" |
-            "heart_rate" |
-            "muscle_mass_percent" |
-            "body_fat_mass" |
-            "lean_body_mass" |
-            "bone_mass_percentage" |
-            "visceral_fat_mass" |
-            "protein_percentage" |
-            "skeletal_muscle_mass" |
-            "subcutaneous_fat_percentage" |
-            "body_age" |
-            "body_type" |
-            "head_size"
-          ):
-            pass
-          case _:
-            pass
-      csv_writer.writerow(row)
 
 
 def main() -> None:
@@ -428,5 +523,3 @@ def main() -> None:
 
 if __name__ == "__main__":
   main()
-
-
