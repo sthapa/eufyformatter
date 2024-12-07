@@ -2,6 +2,7 @@
 
 import csv
 import os
+import re
 import sys
 import datetime
 from collections import defaultdict
@@ -197,9 +198,9 @@ def write_garmin_file(filename: str, entries: list[WeightEntry], fields: list[st
   """
   if os.path.exists(filename):
     sys.exit("File already exists, exiting\n")
-  selected_fields = [convert_fieldname(x) for x in fields]
-  if fields is None:
-    selected_fields = ["time", "weight", "bmi", "body_fat", "muscle_mass", "bmr", "water", "bone_mass"]
+  selected_fields = ["time", "weight", "bmi", "body_fat", "muscle_mass", "bmr", "water", "bone_mass"]
+  if fields is not None:
+    selected_fields = [convert_fieldname(x) for x in fields]
 
   encoder = FitEncoderWeight()
   encoder.write_file_info()
@@ -244,7 +245,6 @@ def write_garmin_file(filename: str, entries: list[WeightEntry], fields: list[st
             pass
           case _:
             pass
-      print(fields)
       encoder.write_weight_scale(timestamp=entry.time,
                                  weight=fields["weight"],
                                  percent_fat=fields["body_fat"],
@@ -297,9 +297,12 @@ def select_columns() -> list[str]:
   selected_rows = []
   cur_row = 0
   table_data = []
+  i = 0
   for k, v in EUFY_COLUMN_CONVERSIONS.items():
     if v is not None:
       table_data.append((k, v))
+      selected_rows.append(i)
+      i += 1
   while True:
     console.clear()
     table = generate_column_table(table_data, selected_rows, cur_row)
@@ -458,24 +461,27 @@ def export_entries(filename: str, entries: list[WeightEntry], export_fields: lis
             pass
           case _:
             pass
-      print(row)
       csv_writer.writerow(row)
   return True
 
 
 @click.command()
 @click.option('--filename', help="File with data to import", required=True)
-def interactive_export(filename: str = None) -> None:
+@click.option('--output', help="File with data to import", required=True)
+def interactive_export(filename: str, output: str) -> None:
   """
   Interactively export data to a Garmin compatible csv file
 
   :param filename: string with name of file to open
+  :param output: string with name of file to export to
   :return: None
   """
-  if filename is None:
+  if filename is None or output is None:
     sys.exit("Filename not specified, exiting\n")
   if not os.path.exists(filename):
-    sys.exit("File does not exist, exiting\n")
+    sys.exit(f"File {filename} does not exist, exiting\n")
+  if os.path.exists(output):
+    sys.exit(f"File {output} exists, exiting\n")
   entries = read_eufyfile(filename)
   columns = select_columns()
   start_time, end_time = select_dates(entries)
@@ -484,7 +490,7 @@ def interactive_export(filename: str = None) -> None:
     if start_time <= entry.time <= end_time:
       filtered_entries.append(entry)
   filtered_entries.sort(key=lambda x: x.time)
-  write_garmin_file("exported.fit", filtered_entries, columns)
+  write_garmin_file(output, filtered_entries, columns)
 
 
 @click.command()
@@ -492,7 +498,7 @@ def interactive_export(filename: str = None) -> None:
 @click.option('--output', help="File with data to import", required=True)
 @click.option('--start', help="Start date in YYYY-MM-DD format", required=False)
 @click.option('--end', help="End date in YYYY-MM-DD format", required=False)
-def batch_export(filename: str, output: str, start, end, export_fields: list[str]) -> None:
+def batch_export(filename: str, output: str, start, end) -> None:
   """
   Export data to csv file that Garmin Connect can import
 
@@ -500,7 +506,6 @@ def batch_export(filename: str, output: str, start, end, export_fields: list[str
   :param output: string with name of file to export to
   :param start: start date in YYYY-MM-DD format
   :param end: end date in YYYY-MM-DD format
-  :param export_fields: optional list of fields to export
   :return: None
   """
   if filename is None:
@@ -508,17 +513,37 @@ def batch_export(filename: str, output: str, start, end, export_fields: list[str
   if not os.path.exists(filename):
     sys.exit("File does not exist, exiting\n")
   entries = read_eufyfile(filename)
+  filtered_entries = []
+  date_re = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
+  print(start)
+  if match := date_re.match(start):
+    print(match.groups())
+    start_time = datetime.datetime(int(match.group(1)),
+                                   int(match.group(2)),
+                                   int(match.group(3)), 0, 0, 0)
+  else:
+    sys.exit("Start date must be in YYYY-MM-DD format, exiting\n")
 
+  if match := date_re.match(end):
+    end_time = datetime.datetime(int(match.group(1)),
+                                 int(match.group(2)),
+                                 int(match.group(3)), 23, 59, 59)
+  else:
+    sys.exit("End date must be in YYYY-MM-DD format, exiting\n")
+  for entry in entries:
+    if start_time <= entry.time <= end_time:
+      filtered_entries.append(entry)
+  print(filtered_entries)
+  write_garmin_file(output, filtered_entries)
 
 
 def main() -> None:
-  if len(sys.argv) == 3:
+  if len(sys.argv) == 5:
     interactive_export()
-  elif len(sys.argv) > 3:
+  elif len(sys.argv) > 5:
     batch_export()
   else:
-    print("Need to provide more arguments")
-    sys.exit(1)
+    sys.exit("Need to provide more arguments")
 
 
 if __name__ == "__main__":
