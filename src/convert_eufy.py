@@ -20,20 +20,26 @@ EUFY_COLUMN_CONVERSIONS = {
   "Time": "Date",
   "Family Members": None,
   "WEIGHT (kg)": "Body Weight",
+  "WEIGHT (lbs)": "Body Weight",
   "BMI": "BMI",
   "BODY FAT %": "Body Fat",
   "HEART RATE (bpm)": None,
   "MUSCLE MASS (kg)": "Skeletal Muscle Mass",
+  "MUSCLE MASS (lbs)": "Skeletal Muscle Mass",
   "MUSCLE MASS %": None,
   "BMR": None,
   "WATER": "Body Water",
   "BODY FAT MASS (kg)": None,
+  "BODY FAT MASS (lbs)": None,
   "LEAN BODY MASS (kg)": None,
+  "LEAN BODY MASS (lbs)": None,
   "BONE MASS (kg)": "Bone Mass",
+  "BONE MASS (lbs)": "Bone Mass",
   "BONE MASS %": None,
   "VISCERAL FAT	": None,
   "PROTEIN %": None,
   "SKELETAL MUSCLE MASS (kg)": None,
+  "SKELETAL MUSCLE MASS (lbs)": None,
   "SUBCUTANEOUS FAT %": None,
   "BODY AGE": None,
   "BODY TYPE": None,
@@ -80,6 +86,8 @@ def convert_fieldname(fieldname: str) -> str:
       pass
     case "WEIGHT (kg)":
       return "weight"
+    case "WEIGHT (lbs)":
+      return "weight"
     case "BMI":
       return "bmi"
     case "BODY FAT %":
@@ -87,6 +95,8 @@ def convert_fieldname(fieldname: str) -> str:
     case "HEART RATE (bpm)":
       return "heart_rate"
     case "MUSCLE MASS (kg)":
+      return "muscle_mass"
+    case "MUSCLE MASS (lbs)":
       return "muscle_mass"
     case "MUSCLE MASS %":
       return "muscle_mass_percent"
@@ -96,9 +106,15 @@ def convert_fieldname(fieldname: str) -> str:
       return "water"
     case "BODY FAT MASS (kg)":
       return "body_fat_mass"
+    case "BODY FAT MASS (lbs)":
+      return "body_fat_mass"
     case "LEAN BODY MASS (kg)":
       return "lean_body_mass"
+    case "LEAN BODY MASS (lbs)":
+      return "lean_body_mass"
     case "BONE MASS (kg)":
+      return "bone_mass"
+    case "BONE MASS (lbs)":
       return "bone_mass"
     case "BONE MASS %":
       return "bone_mass_percent"
@@ -107,6 +123,8 @@ def convert_fieldname(fieldname: str) -> str:
     case "PROTEIN %":
       return "protein_percentage"
     case "SKELETAL MUSCLE MASS (kg)":
+      return "skeletal_muscle_mass"
+    case "SKELETAL MUSCLE MASS (lbs)":
       return "skeletal_muscle_mass"
     case "SUBCUTANEOUS FAT %":
       return "subcutaneous_fat_percentage"
@@ -133,6 +151,7 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
     sys.exit("File does not exist or is invalid, exiting\n")
 
   entries = []
+  lb_to_kg_factor = 0.45359237
   with open(filename, "r", encoding='utf-8-sig') as eufy_file:
     reader = csv.DictReader(eufy_file)
     for row in reader:
@@ -145,6 +164,8 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
             pass
           case "WEIGHT (kg)":
             entry.weight = float(val)
+          case "WEIGHT (lbs)":
+            entry.weight = round(float(val) * lb_to_kg_factor, 1)  # convert to kg
           case "BMI":
             entry.bmi = float(val)
           case "BODY FAT %":
@@ -153,6 +174,8 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
             entry.heart_rate = float(val)
           case "MUSCLE MASS (kg)":
             entry.muscle_mass = float(val)
+          case "MUSCLE MASS (lbs)":
+            entry.muscle_mass = round(float(val) * lb_to_kg_factor, 1)
           case "MUSCLE MASS %":
             entry.muscle_mass_percent = float(val)
           case "BMR":
@@ -161,10 +184,16 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
             entry.water = float(val)
           case "BODY FAT MASS (kg)":
             entry.body_fat_mass = float(val)
+          case "BODY FAT MASS (lbs)":
+            entry.body_fat_mass = round(float(val) * lb_to_kg_factor, 1)
           case "LEAN BODY MASS (kg)":
             entry.lean_body_mass = float(val)
+          case "LEAN BODY MASS (lbs)":
+            entry.lean_body_mass = round(float(val) * lb_to_kg_factor, 1)
           case "BONE MASS (kg)":
             entry.bone_mass = float(val)
+          case "BONE MASS (lbs)":
+            entry.bone_mass = round(float(val) * lb_to_kg_factor, 1)
           case "BONE MASS %":
             entry.bone_mass_percent = float(val)
           case "VISCERAL FAT":
@@ -173,6 +202,8 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
             entry.protein_percentage = float(val)
           case "SKELETAL MUSCLE MASS (kg)":
             entry.skeletal_muscle_mass = float(val)
+          case "SKELETAL MUSCLE MASS (lbs)":
+            entry.skeletal_muscle_mass = round(float(val) * lb_to_kg_factor, 1)
           case "SUBCUTANEOUS FAT %":
             entry.subcutaneous_fat_percentage = float(val)
           case "BODY AGE":
@@ -246,6 +277,7 @@ def write_garmin_file(filename: str, entries: list[WeightEntry], fields: list[st
           case _:
             pass
       encoder.write_weight_scale(timestamp=entry.time,
+                                 bmi=fields["bmi"],
                                  weight=fields["weight"],
                                  percent_fat=fields["body_fat"],
                                  percent_hydration=fields["water"],
@@ -348,12 +380,27 @@ def generate_date_table(table_data: list[datetime.datetime],
   selected_row_style = Style(color="black", bgcolor="gold1")
   table_data.sort()
   table = Table(show_header=True, header_style="bold magenta")
-  table.add_column("Selected", width=2, max_width=2)
+  table.add_column("Selected", width=8, max_width=8)
   table.add_column("Date")
   row = 0
   if cur_row is None:
     cur_row = 0
-  for entry in table_data:
+  start_row = cur_row - 10 if cur_row >= 10 else 0
+  end_row = cur_row + 10 if cur_row + 10 < len(table_data) else len(table_data)
+  if start_row == 0 and end_row == len(table_data):
+    pass
+  elif start_row == 0:
+    adjustment = 0
+    if end_row - start_row < 21:
+      adjustment = 21 - (end_row - start_row)
+    end_row += adjustment
+  elif end_row == len(table_data):
+    adjustment = 0
+    if end_row - start_row < 21:
+      adjustment = 21 - (end_row - start_row)
+    start_row -= adjustment
+
+  for entry in table_data[start_row:end_row]:
     select_col_char = ""
     if row == cur_row:
       table.add_row(select_col_char,
@@ -427,7 +474,6 @@ def export_entries(filename: str, entries: list[WeightEntry], export_fields: lis
     for entry in entries:
       row = []
       for field in export_fields:
-        print(EUFY_COLUMN_CONVERSIONS[field])
         match EUFY_COLUMN_CONVERSIONS[field]:
           case "time":
             row.append(entry.time)
@@ -515,9 +561,7 @@ def batch_export(filename: str, output: str, start, end) -> None:
   entries = read_eufyfile(filename)
   filtered_entries = []
   date_re = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
-  print(start)
   if match := date_re.match(start):
-    print(match.groups())
     start_time = datetime.datetime(int(match.group(1)),
                                    int(match.group(2)),
                                    int(match.group(3)), 0, 0, 0)
@@ -533,7 +577,6 @@ def batch_export(filename: str, output: str, start, end) -> None:
   for entry in entries:
     if start_time <= entry.time <= end_time:
       filtered_entries.append(entry)
-  print(filtered_entries)
   write_garmin_file(output, filtered_entries)
 
 
