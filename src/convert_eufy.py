@@ -136,6 +136,7 @@ def convert_fieldname(fieldname: str) -> str:
       return "head_size"
     case _:
       sys.exit(f"Unrecognized field {fieldname}, exiting\n")
+  return ""
 
 
 def read_eufyfile(filename: str = None) -> list[WeightEntry]:
@@ -511,12 +512,13 @@ def export_entries(filename: str, entries: list[WeightEntry], export_fields: lis
   return True
 
 
-@click.command()
+@click.command("interactive", short_help="Interactively convert data")
 @click.option('--filename', help="File with data to import", required=True)
 @click.option('--output', help="File with data to import", required=True)
 def interactive_export(filename: str, output: str) -> None:
   """
-  Interactively export data to a Garmin compatible csv file
+  Interactively export data to a Garmin compatible fit file.
+  \f
 
   :param filename: string with name of file to open
   :param output: string with name of file to export to
@@ -539,14 +541,14 @@ def interactive_export(filename: str, output: str) -> None:
   write_garmin_file(output, filtered_entries, columns)
 
 
-@click.command()
+@click.command('batch', short_help="Convert and export data automatically")
 @click.option('--filename', help="File with data to import", required=True)
 @click.option('--output', help="File with data to import", required=True)
 @click.option('--start', help="Start date in YYYY-MM-DD format", required=False)
 @click.option('--end', help="End date in YYYY-MM-DD format", required=False)
 def batch_export(filename: str, output: str, start, end) -> None:
   """
-  Export data to csv file that Garmin Connect can import
+  Export data from csv to fit file that Garmin Connect can import
 
   :param filename: string with name of file to open
   :param output: string with name of file to export to
@@ -579,9 +581,9 @@ def batch_export(filename: str, output: str, start, end) -> None:
       filtered_entries.append(entry)
   write_garmin_file(output, filtered_entries)
 
-
+@click.group()
 def main() -> None:
-  if len(sys.argv) == 5:
+  if len(sys.argv) < 5:
     interactive_export()
   elif len(sys.argv) > 5:
     batch_export()
@@ -590,4 +592,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+  main.add_command(interactive_export)
+  main.add_command(batch_export)
   main()
