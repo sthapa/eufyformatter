@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-
 import csv
 import os
 import re
@@ -583,13 +582,7 @@ def batch_export(filename: str, output: str, start, end) -> None:
 
 @click.group()
 def main() -> None:
-  if len(sys.argv) < 5:
-    interactive_export()
-  elif len(sys.argv) > 5:
-    batch_export()
-  else:
-    sys.exit("Need to provide more arguments")
-
+  pass
 
 if __name__ == "__main__":
   main.add_command(interactive_export)
