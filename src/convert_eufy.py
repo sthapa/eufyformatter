@@ -147,8 +147,6 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
   if filename is None:
     sys.exit("Filename not specified, exiting\n")
   if not os.path.exists(filename) or not os.path.isfile(filename):
-    import pathlib
-    sys.stdout.write(f"{os.path.abspath(os.path.curdir)}\n")
     sys.exit("File does not exist or is invalid, exiting\n")
 
   entries = []
@@ -267,7 +265,6 @@ def write_garmin_file(filename: str, entries: list[WeightEntry], fields: list[st
                 "body_fat_mass" |
                 "lean_body_mass" |
                 "bone_mass_percentage" |
-                "visceral_fat_percentage" |
                 "protein_percentage" |
                 "skeletal_muscle_mass" |
                 "subcutaneous_fat_percentage" |
@@ -459,9 +456,10 @@ def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.da
       case _:
         pass
 
+
 @click.command("interactive", short_help="Interactively convert data")
 @click.option('--filename', help="File with data to import", required=True)
-@click.option('--output', help="File with data to import", required=True)
+@click.option('--output', help="File with data to export", required=True)
 def interactive_export(filename: str, output: str) -> None:
   """
   Interactively export data to a Garmin compatible fit file.
@@ -490,7 +488,7 @@ def interactive_export(filename: str, output: str) -> None:
 
 @click.command('batch', short_help="Convert and export data automatically")
 @click.option('--filename', help="File with data to import", required=True)
-@click.option('--output', help="File with data to import", required=True)
+@click.option('--output', help="File with data to export", required=True)
 @click.option('--start', help="Start date in YYYY-MM-DD format", required=False)
 @click.option('--end', help="End date in YYYY-MM-DD format", required=False)
 def batch_export(filename: str, output: str, start, end) -> None:
@@ -528,9 +526,11 @@ def batch_export(filename: str, output: str, start, end) -> None:
       filtered_entries.append(entry)
   write_garmin_file(output, filtered_entries)
 
+
 @click.group()
 def main() -> None:
   pass
+
 
 if __name__ == "__main__":
   main.add_command(interactive_export)
