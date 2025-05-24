@@ -51,7 +51,6 @@ class WeightEntry:
   time: datetime.datetime
   weight: float  # weight in kg
   bmi: float
-  family_member: str = ""  # name of user
   body_fat: float = 0  # % of body weight due to fat
   heart_rate: float = 0
   muscle_mass: float = 0  # muscle mass in body in kg
@@ -62,7 +61,7 @@ class WeightEntry:
   lean_body_mass: float = 0  # lean body mass in kg
   bone_mass: float = 0  # mass of bones in kg
   bone_mass_percentage: float = 0  # % of body weight due to bones
-  visceral_fat_mass: float = 0  #
+  visceral_fat_percentage: float = 0  # visceral fat percentagge
   protein_percentage: float = 0  # % of protein in body
   skeletal_muscle_mass: float = 0  # mass of skeletal muscle in kg
   subcutaneous_fat_percentage: float = 0  # % of subcutaneous fat
@@ -118,7 +117,7 @@ def convert_fieldname(fieldname: str) -> str:
     case "BONE MASS %":
       return "bone_mass_percent"
     case "VISCERAL FAT":
-      return "visceral_fat_mass"
+      return "visceral_fat_percentage"
     case "PROTEIN %":
       return "protein_percentage"
     case "SKELETAL MUSCLE MASS (kg)":
@@ -148,6 +147,8 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
   if filename is None:
     sys.exit("Filename not specified, exiting\n")
   if not os.path.exists(filename) or not os.path.isfile(filename):
+    import pathlib
+    sys.stdout.write(f"{os.path.abspath(os.path.curdir)}\n")
     sys.exit("File does not exist or is invalid, exiting\n")
 
   entries = []
@@ -195,9 +196,9 @@ def read_eufyfile(filename: str = None) -> list[WeightEntry]:
           case "BONE MASS (lbs)":
             entry.bone_mass = round(float(val) * lb_to_kg_factor, 1)
           case "BONE MASS %":
-            entry.bone_mass_percent = float(val)
+            entry.bone_mass_percentage = float(val)
           case "VISCERAL FAT":
-            entry.visceral_fat_mass = float(val)
+            entry.visceral_fat_percentage = float(val)
           case "PROTEIN %":
             entry.protein_percentage = float(val)
           case "SKELETAL MUSCLE MASS (kg)":
@@ -258,15 +259,15 @@ def write_garmin_file(filename: str, entries: list[WeightEntry], fields: list[st
             fields["bone_mass"] = entry.bone_mass
           case "body_age":
             fields["body_age"] = entry.body_age
-          case "visceral_fat_mass":
-            fields["visceral_fat_mass"] = entry.visceral_fat_mass
+          case "visceral_fat_percentage":
+            fields["visceral_fat_mass"] = entry.visceral_fat_percentage
           case ("family_member" |
                 "heart_rate" |
                 "muscle_mass_percent" |
                 "body_fat_mass" |
                 "lean_body_mass" |
                 "bone_mass_percentage" |
-                "visceral_fat_mass" |
+                "visceral_fat_percentage" |
                 "protein_percentage" |
                 "skeletal_muscle_mass" |
                 "subcutaneous_fat_percentage" |
@@ -281,7 +282,7 @@ def write_garmin_file(filename: str, entries: list[WeightEntry], fields: list[st
                                  weight=fields["weight"],
                                  percent_fat=fields["body_fat"],
                                  percent_hydration=fields["water"],
-                                 visceral_fat_mass=fields["visceral_fat_mass"],
+                                 visceral_fat_mass=fields["visceral_fat_percentage"],
                                  bone_mass=fields['bone_mass'],
                                  muscle_mass=fields["muscle_mass"],
                                  basal_met=fields["bmr"],
@@ -457,59 +458,6 @@ def select_dates(entries: list[WeightEntry]) -> tuple[datetime.date, datetime.da
         return start_time, end_time
       case _:
         pass
-
-
-def export_entries(filename: str, entries: list[WeightEntry], export_fields: list[str]) -> bool:
-  """
-  Export entries from Eufy export
-
-  :param filename: name of file to write to
-  :param entries: entries to write
-  :param export_fields: list of fields to export
-  :return: True on success, False on failure
-  """
-  with open(filename, "w") as f:
-    csv_writer = csv.writer(f)
-    csv_writer.writerow(export_fields)
-    for entry in entries:
-      row = []
-      for field in export_fields:
-        match EUFY_COLUMN_CONVERSIONS[field]:
-          case "time":
-            row.append(entry.time)
-          case "weight":
-            row.append(entry.weight)
-          case "bmi":
-            row.append(entry.bmi)
-          case "body_fat":
-            row.append(entry.body_fat)
-          case "muscle_mass":
-            row.append(entry.muscle_mass)
-          case "bmr_water":            
-            row.append(entry.bmr)
-          case "bone_mass":
-            row.append(entry.bone_mass)
-          case (
-            "family_member" |
-            "heart_rate" |
-            "muscle_mass_percent" |
-            "body_fat_mass" |
-            "lean_body_mass" |
-            "bone_mass_percentage" |
-            "visceral_fat_mass" |
-            "protein_percentage" |
-            "skeletal_muscle_mass" |
-            "subcutaneous_fat_percentage" |
-            "body_age" |
-            "body_type" |
-            "head_size"
-          ):
-            pass
-          case _:
-            pass
-      csv_writer.writerow(row)
-  return True
-
 
 @click.command("interactive", short_help="Interactively convert data")
 @click.option('--filename', help="File with data to import", required=True)
