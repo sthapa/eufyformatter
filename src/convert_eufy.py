@@ -508,19 +508,27 @@ def batch_export(filename: str, output: str, start, end) -> None:
   entries = read_eufyfile(filename)
   filtered_entries = []
   date_re = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
-  if match := date_re.match(start):
-    start_time = datetime.datetime(int(match.group(1)),
-                                   int(match.group(2)),
-                                   int(match.group(3)), 0, 0, 0)
+  if start is None:
+    start_time = datetime.datetime(2000,
+                                   1,
+                                   1, 0, 0, 0)
   else:
-    sys.exit("Start date must be in YYYY-MM-DD format, exiting\n")
+    if match := date_re.match(start):
+      start_time = datetime.datetime(int(match.group(1)),
+                                     int(match.group(2)),
+                                     int(match.group(3)), 0, 0, 0)
+    else:
+      sys.exit("Start date must be in YYYY-MM-DD format, exiting\n")
 
-  if match := date_re.match(end):
-    end_time = datetime.datetime(int(match.group(1)),
-                                 int(match.group(2)),
-                                 int(match.group(3)), 23, 59, 59)
+  if end is None:
+    end_time = datetime.datetime.now()
   else:
-    sys.exit("End date must be in YYYY-MM-DD format, exiting\n")
+    if match := date_re.match(end):
+      end_time = datetime.datetime(int(match.group(1)),
+                                   int(match.group(2)),
+                                   int(match.group(3)), 23, 59, 59)
+    else:
+      sys.exit("End date must be in YYYY-MM-DD format, exiting\n")
   for entry in entries:
     if start_time <= entry.time <= end_time:
       filtered_entries.append(entry)
